@@ -1,29 +1,42 @@
-//指定proto3语法
 syntax = "proto3";
 
 option go_package = "./;server";
 
-//包名
 package server;
 
-//一个为Hello的服务（可定义多个服务,每个服务可定义多个方法）
 service Hello {
-
-  //一个SayHello的方法
   rpc SayHello (HelloRequest) returns (HelloResp) {}
+  rpc ServerSideHello (ServerSideRequest) returns (stream ServerSideResp) {}
+  rpc ClientSideHello (stream ClientSideRequest) returns (ClientSideResp) {}
+  rpc BidirectionalHello (stream BidirectionalRequest) returns (stream BidirectionalResp) {}
+
 
 }
-
-// 定义发送请求信息
 message HelloRequest {
-
-  // 定义发送的参数
-  // 参数类型 参数名 标识号(不可重复)
   string name = 1;
 
 }
-
-// 定义响应信息
 message HelloResp {
+  string message = 1;
+}
+
+message ServerSideRequest {
+  string name = 1;
+}
+message ServerSideResp {
+  string message = 1;
+}
+
+message ClientSideRequest {
+  string name = 1;
+}
+message ClientSideResp {
+  string message = 1;
+}
+
+message BidirectionalRequest {
+  string name = 1;
+}
+message BidirectionalResp {
   string message = 1;
 }

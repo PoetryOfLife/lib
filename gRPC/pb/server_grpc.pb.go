@@ -22,8 +22,10 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type HelloClient interface {
-	//一个SayHello的方法
 	SayHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResp, error)
+	ServerSideHello(ctx context.Context, in *ServerSideRequest, opts ...grpc.CallOption) (Hello_ServerSideHelloClient, error)
+	ClientSideHello(ctx context.Context, opts ...grpc.CallOption) (Hello_ClientSideHelloClient, error)
+	BidirectionalHello(ctx context.Context, opts ...grpc.CallOption) (Hello_BidirectionalHelloClient, error)
 }
 
 type helloClient struct {
@@ -43,21 +45,131 @@ func (c *helloClient) SayHello(ctx context.Context, in *HelloRequest, opts ...gr
 	return out, nil
 }
 
-// HelloServer is the server API for Hello service.
-// All implementations should embed UnimplementedHelloServer
-// for forward compatibility
-type HelloServer interface {
-	//一个SayHello的方法
-	SayHello(context.Context, *HelloRequest) (*HelloResp, error)
+func (c *helloClient) ServerSideHello(ctx context.Context, in *ServerSideRequest, opts ...grpc.CallOption) (Hello_ServerSideHelloClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Hello_ServiceDesc.Streams[0], "/server.Hello/ServerSideHello", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &helloServerSideHelloClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
-// UnimplementedHelloServer should be embedded to have forward compatible implementations.
+type Hello_ServerSideHelloClient interface {
+	Recv() (*ServerSideResp, error)
+	grpc.ClientStream
+}
+
+type helloServerSideHelloClient struct {
+	grpc.ClientStream
+}
+
+func (x *helloServerSideHelloClient) Recv() (*ServerSideResp, error) {
+	m := new(ServerSideResp)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *helloClient) ClientSideHello(ctx context.Context, opts ...grpc.CallOption) (Hello_ClientSideHelloClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Hello_ServiceDesc.Streams[1], "/server.Hello/ClientSideHello", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &helloClientSideHelloClient{stream}
+	return x, nil
+}
+
+type Hello_ClientSideHelloClient interface {
+	Send(*ClientSideRequest) error
+	CloseAndRecv() (*ClientSideResp, error)
+	grpc.ClientStream
+}
+
+type helloClientSideHelloClient struct {
+	grpc.ClientStream
+}
+
+func (x *helloClientSideHelloClient) Send(m *ClientSideRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *helloClientSideHelloClient) CloseAndRecv() (*ClientSideResp, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(ClientSideResp)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *helloClient) BidirectionalHello(ctx context.Context, opts ...grpc.CallOption) (Hello_BidirectionalHelloClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Hello_ServiceDesc.Streams[2], "/server.Hello/BidirectionalHello", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &helloBidirectionalHelloClient{stream}
+	return x, nil
+}
+
+type Hello_BidirectionalHelloClient interface {
+	Send(*BidirectionalRequest) error
+	Recv() (*BidirectionalResp, error)
+	grpc.ClientStream
+}
+
+type helloBidirectionalHelloClient struct {
+	grpc.ClientStream
+}
+
+func (x *helloBidirectionalHelloClient) Send(m *BidirectionalRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *helloBidirectionalHelloClient) Recv() (*BidirectionalResp, error) {
+	m := new(BidirectionalResp)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// HelloServer is the server API for Hello service.
+// All implementations must embed UnimplementedHelloServer
+// for forward compatibility
+type HelloServer interface {
+	SayHello(context.Context, *HelloRequest) (*HelloResp, error)
+	ServerSideHello(*ServerSideRequest, Hello_ServerSideHelloServer) error
+	ClientSideHello(Hello_ClientSideHelloServer) error
+	BidirectionalHello(Hello_BidirectionalHelloServer) error
+	mustEmbedUnimplementedHelloServer()
+}
+
+// UnimplementedHelloServer must be embedded to have forward compatible implementations.
 type UnimplementedHelloServer struct {
 }
 
 func (UnimplementedHelloServer) SayHello(context.Context, *HelloRequest) (*HelloResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SayHello not implemented")
 }
+func (UnimplementedHelloServer) ServerSideHello(*ServerSideRequest, Hello_ServerSideHelloServer) error {
+	return status.Errorf(codes.Unimplemented, "method ServerSideHello not implemented")
+}
+func (UnimplementedHelloServer) ClientSideHello(Hello_ClientSideHelloServer) error {
+	return status.Errorf(codes.Unimplemented, "method ClientSideHello not implemented")
+}
+func (UnimplementedHelloServer) BidirectionalHello(Hello_BidirectionalHelloServer) error {
+	return status.Errorf(codes.Unimplemented, "method BidirectionalHello not implemented")
+}
+func (UnimplementedHelloServer) mustEmbedUnimplementedHelloServer() {}
 
 // UnsafeHelloServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to HelloServer will
@@ -88,6 +200,79 @@ func _Hello_SayHello_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Hello_ServerSideHello_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ServerSideRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HelloServer).ServerSideHello(m, &helloServerSideHelloServer{stream})
+}
+
+type Hello_ServerSideHelloServer interface {
+	Send(*ServerSideResp) error
+	grpc.ServerStream
+}
+
+type helloServerSideHelloServer struct {
+	grpc.ServerStream
+}
+
+func (x *helloServerSideHelloServer) Send(m *ServerSideResp) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Hello_ClientSideHello_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HelloServer).ClientSideHello(&helloClientSideHelloServer{stream})
+}
+
+type Hello_ClientSideHelloServer interface {
+	SendAndClose(*ClientSideResp) error
+	Recv() (*ClientSideRequest, error)
+	grpc.ServerStream
+}
+
+type helloClientSideHelloServer struct {
+	grpc.ServerStream
+}
+
+func (x *helloClientSideHelloServer) SendAndClose(m *ClientSideResp) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *helloClientSideHelloServer) Recv() (*ClientSideRequest, error) {
+	m := new(ClientSideRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _Hello_BidirectionalHello_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HelloServer).BidirectionalHello(&helloBidirectionalHelloServer{stream})
+}
+
+type Hello_BidirectionalHelloServer interface {
+	Send(*BidirectionalResp) error
+	Recv() (*BidirectionalRequest, error)
+	grpc.ServerStream
+}
+
+type helloBidirectionalHelloServer struct {
+	grpc.ServerStream
+}
+
+func (x *helloBidirectionalHelloServer) Send(m *BidirectionalResp) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *helloBidirectionalHelloServer) Recv() (*BidirectionalRequest, error) {
+	m := new(BidirectionalRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // Hello_ServiceDesc is the grpc.ServiceDesc for Hello service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -100,6 +285,23 @@ var Hello_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Hello_SayHello_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ServerSideHello",
+			Handler:       _Hello_ServerSideHello_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ClientSideHello",
+			Handler:       _Hello_ClientSideHello_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "BidirectionalHello",
+			Handler:       _Hello_BidirectionalHello_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "server.proto",
 }
