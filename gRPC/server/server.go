@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	pb "gRPC/pb"
+	pb "gRPC/pb/server"
 	"google.golang.org/grpc"
 	"log"
 	"net"
