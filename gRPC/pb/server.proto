@@ -1,8 +1,10 @@
 //指定proto3语法
 syntax = "proto3";
 
+option go_package = "./;server";
+
 //包名
-package helloworld;
+package server;
 
 //一个为Hello的服务（可定义多个服务,每个服务可定义多个方法）
 service Hello {
