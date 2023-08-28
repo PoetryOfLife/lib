@@ -14,10 +14,51 @@ const (
 	ServerAddress string = ":8000"
 )
 
+func orderUnaryClientInterceptor(ctx context.Context, method string, req, reply interface{},
+	cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	// 前置处理阶段
+	log.Println("method: " + method)
+	// 实际的RPC调用
+	err := invoker(ctx, method, req, reply, cc, opts...)
+	// 后置处理
+	log.Println(reply)
+	return err
+}
+
+type wrappedStream struct {
+	grpc.ClientStream
+}
+
+func (w *wrappedStream) SendMsg(m interface{}) error {
+	log.Printf("[stream interceptor send] %s", m)
+	return w.ClientStream.SendMsg(m)
+}
+func (w *wrappedStream) RecvMsg(m interface{}) error {
+	log.Printf("[stream interceptor recv] type: %T", m)
+	return w.ClientStream.RecvMsg(m)
+}
+
+func orderClientStreamInterceptor(ctx context.Context, desc *grpc.StreamDesc,
+	cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	// 前置处理阶段，RPC请求发出之前拦截
+	log.Printf("[client interceptor send] %s", method)
+	// 发出RPC请求
+	s, err := streamer(ctx, desc, cc, method, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &wrappedStream{s}, nil
+}
+
 func main() {
 
 	// 连接服务器
-	conn, err := grpc.Dial(ServerAddress, grpc.WithInsecure())
+	conn, err := grpc.Dial(
+		ServerAddress,
+		grpc.WithInsecure(),
+		grpc.WithUnaryInterceptor(orderUnaryClientInterceptor),
+		grpc.WithStreamInterceptor(orderClientStreamInterceptor),
+	)
 	if err != nil {
 		log.Fatalf("net.Connect err: %v", err)
 	}

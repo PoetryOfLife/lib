@@ -76,6 +76,37 @@ func (s *HelloService) BidirectionalHello(server pb.Hello_BidirectionalHelloServ
 	}
 }
 
+func orderUnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler) (interface{}, error) {
+	log.Printf("[unary interceptor request] %s", info.FullMethod)
+	m, err := handler(ctx, req)
+	log.Printf("[unary interceptor resonse] %s", m)
+	return m, err
+}
+
+type wrappedStream struct {
+	grpc.ServerStream
+}
+
+func (w *wrappedStream) RecvMsg(m interface{}) error {
+	log.Printf("[stream interceptor recv] type: %T", m)
+	return w.ServerStream.RecvMsg(m)
+}
+func (w *wrappedStream) SendMsg(m interface{}) error {
+	log.Printf("[stream interceptor send] %s", m)
+	return w.ServerStream.SendMsg(m)
+}
+
+func orderServerStreamInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo,
+	handler grpc.StreamHandler) error {
+	log.Printf("[stream interceptor request] %s", info.FullMethod)
+	err := handler(srv, &wrappedStream{ss})
+	if err != nil {
+		log.Printf("[stream Intercept error] %v", err)
+	}
+	return err
+}
+
 func main() {
 	// 监听本地端口
 	listener, err := net.Listen(Network, Address)
@@ -86,7 +117,9 @@ func main() {
 	log.Println(Address + " net.Listing...")
 
 	// 新建gRPC服务器实例
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(orderUnaryServerInterceptor),
+		grpc.StreamInterceptor(orderServerStreamInterceptor))
 
 	// 在gRPC服务器注册我们的服务
 	pb.RegisterHelloServer(grpcServer, &HelloService{})
